@@ -1,34 +1,19 @@
-# Flask Web Interface Requirements
 flask
-
-# Core LangChain and Groq
+flask-cors
+python-dotenv
 langchain
-langchain-groq
 langchain-community
+langchain-chroma
 langchain-huggingface
-
-# Agent Framework
-langgraph
-langsmith
-
-# Vector Database and Embeddings
+langchain-groq
+groq
 chromadb
 sentence-transformers
-
-# Document Processing
 pypdf
 unstructured
-python-markdown
-
-# Web Search and Scraping
-duckduckgo-search
+markdown
 beautifulsoup4
 requests
-
-# Utilities
-python-dotenv
-pandas
-
-# Optional: For better performance
-torch
-transformers
+duckduckgo-search
+pydantic
+werkzeug

@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify, send_file
+from flask_cors import CORS
 import os
 import logging
 import json
@@ -8,6 +9,8 @@ from agent.research_agent import ResearchAgent
 import tempfile
 import threading
 import uuid
+from werkzeug.utils import secure_filename
+import shutil
 
 # Load environment variables
 load_dotenv()
@@ -19,9 +22,23 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+# Enable CORS for React frontend
+CORS(app, origins=["http://localhost:3000"])
+
+# Configuration
+UPLOAD_FOLDER = './documents'
+ALLOWED_EXTENSIONS = {'pdf', 'md', 'txt'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
 # Global variables
 agent = None
 research_cache = {}
+chat_history = []
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def initialize_agent():
     """Initialize the research agent."""
@@ -31,9 +48,12 @@ def initialize_agent():
         if not groq_api_key:
             raise ValueError("GROQ_API_KEY not found in environment variables")
         
+        # Ensure documents directory exists
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        
         agent = ResearchAgent(
             groq_api_key=groq_api_key,
-            documents_dir="./documents"
+            documents_dir=UPLOAD_FOLDER
         )
         logger.info("Research agent initialized successfully")
         return True
@@ -43,71 +63,222 @@ def initialize_agent():
 
 @app.route('/')
 def index():
-    """Main page."""
-    # Check if agent is initialized
-    agent_status = agent is not None
-    doc_count = 0
-    
-    if agent:
-        try:
-            vector_info = agent.vector_store.get_collection_info()
-            doc_count = vector_info.get('count', 0)
-        except:
-            doc_count = 0
-    
-    return render_template('index.html', 
-                         agent_status=agent_status, 
-                         doc_count=doc_count)
+    """Serve the React app (in production, this would serve built files)."""
+    return jsonify({"message": "Research Agent API is running. Use the React frontend."})
 
-@app.route('/api/research', methods=['POST'])
-def research():
-    """Conduct research on the given question."""
+@app.route('/api/status')
+def status():
+    """Get system status and document list."""
+    try:
+        doc_count = 0
+        agent_status = False
+        documents_list = []
+        
+        if agent:
+            agent_status = True
+            try:
+                vector_info = agent.vector_store.get_collection_info()
+                doc_count = vector_info.get('count', 0)
+            except:
+                doc_count = 0
+        
+        # Get list of documents
+        if os.path.exists(UPLOAD_FOLDER):
+            for filename in os.listdir(UPLOAD_FOLDER):
+                if os.path.isfile(os.path.join(UPLOAD_FOLDER, filename)):
+                    file_path = os.path.join(UPLOAD_FOLDER, filename)
+                    file_stat = os.stat(file_path)
+                    documents_list.append({
+                        'name': filename,
+                        'size': file_stat.st_size,
+                        'modified': datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
+                        'type': filename.split('.')[-1].lower()
+                    })
+        
+        return jsonify({
+            'agent_initialized': agent_status,
+            'documents_count': doc_count,
+            'documents_list': documents_list,
+            'model': 'Groq Llama-3.1-8B-Instant',
+            'vector_store': 'ChromaDB',
+            'status': 'online' if agent_status else 'offline'
+        })
+        
+    except Exception as e:
+        logger.error(f"Status error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/upload-document', methods=['POST'])
+def upload_document():
+    """Upload a new document."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            
+            # Avoid filename conflicts
+            counter = 1
+            base_name = filename.rsplit('.', 1)[0]
+            extension = filename.rsplit('.', 1)[1]
+            while os.path.exists(os.path.join(UPLOAD_FOLDER, filename)):
+                filename = f"{base_name}_{counter}.{extension}"
+                counter += 1
+            
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            file.save(file_path)
+            
+            # Reinitialize agent to load new documents
+            if agent:
+                try:
+                    # Process the new document
+                    documents = agent.doc_processor.load_documents(UPLOAD_FOLDER)
+                    if documents:
+                        # Clear and rebuild vector store
+                        agent.vector_store = agent.vector_store.__class__(agent.vector_store.persist_directory)
+                        agent.vector_store.add_documents(documents)
+                        logger.info(f"Reindexed documents including {filename}")
+                except Exception as e:
+                    logger.error(f"Error reindexing documents: {e}")
+            
+            return jsonify({
+                'message': f'File {filename} uploaded successfully',
+                'filename': filename
+            })
+        else:
+            return jsonify({'error': 'File type not allowed. Use PDF, MD, or TXT files.'}), 400
+            
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/delete-document/<filename>', methods=['DELETE'])
+def delete_document(filename):
+    """Delete a document."""
+    try:
+        filename = secure_filename(filename)
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'File not found'}), 404
+        
+        os.remove(file_path)
+        
+        # Reinitialize agent to reload documents
+        if agent:
+            try:
+                documents = agent.doc_processor.load_documents(UPLOAD_FOLDER)
+                # Clear and rebuild vector store
+                agent.vector_store = agent.vector_store.__class__(agent.vector_store.persist_directory)
+                if documents:
+                    agent.vector_store.add_documents(documents)
+                logger.info(f"Reindexed documents after deleting {filename}")
+            except Exception as e:
+                logger.error(f"Error reindexing documents: {e}")
+        
+        return jsonify({'message': f'File {filename} deleted successfully'})
+        
+    except Exception as e:
+        logger.error(f"Delete error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    """Handle chat messages and research."""
+    global chat_history
+    
     try:
         data = request.get_json()
-        question = data.get('question', '').strip()
+        message = data.get('message', '').strip()
         
-        if not question:
-            return jsonify({'error': 'No question provided'}), 400
+        if not message:
+            return jsonify({'error': 'No message provided'}), 400
         
         if not agent:
             return jsonify({'error': 'Research agent not initialized'}), 500
         
-        # Generate unique ID for this research
-        research_id = str(uuid.uuid4())
+        # Generate unique ID for this chat
+        chat_id = str(uuid.uuid4())
+        timestamp = datetime.now().isoformat()
+        
+        # Add user message to history
+        user_message = {
+            'id': f"user_{chat_id}",
+            'type': 'user',
+            'content': message,
+            'timestamp': timestamp
+        }
+        chat_history.append(user_message)
         
         # Conduct research
-        logger.info(f"Starting research for: {question}")
-        result = agent.research(question)
+        logger.info(f"Starting research for: {message}")
+        result = agent.research(message)
         
         # Cache result
-        research_cache[research_id] = result
+        research_cache[chat_id] = result
         
-        # Structure response
-        response = {
-            'research_id': research_id,
-            'question': result['question'],
-            'answer': result['answer'],
+        # Create assistant response with research steps
+        research_steps = []
+        for i, step in enumerate(result['intermediate_steps']):
+            research_steps.append({
+                'step': i + 1,
+                'tool': step[0].tool if hasattr(step[0], 'tool') else 'Unknown',
+                'input': step[0].tool_input if hasattr(step[0], 'tool_input') else 'N/A',
+                'output': str(step[1])[:500] + '...' if len(str(step[1])) > 500 else str(step[1]),
+                'timestamp': timestamp
+            })
+        
+        assistant_message = {
+            'id': f"assistant_{chat_id}",
+            'type': 'assistant',
+            'content': result['answer'],
             'timestamp': result['timestamp'],
-            'confidence_level': result['confidence_level'],
-            'sources_count': len(result['sources_used']),
-            'steps_count': len(result['intermediate_steps']),
-            'sources_used': result['sources_used'],
-            'intermediate_steps': [
-                {
-                    'step': i + 1,
-                    'tool': step[0].tool if hasattr(step[0], 'tool') else 'Unknown',
-                    'input': step[0].tool_input if hasattr(step[0], 'tool_input') else 'N/A',
-                    'output': str(step[1])[:500] + '...' if len(str(step[1])) > 500 else str(step[1])
-                }
-                for i, step in enumerate(result['intermediate_steps'])
-            ]
+            'research_steps': research_steps,
+            'sources': result['sources_used'],
+            'confidence': result['confidence_level'],
+            'research_id': chat_id
         }
         
-        logger.info(f"Research completed successfully")
-        return jsonify(response)
+        chat_history.append(assistant_message)
+        
+        # Keep only last 50 messages
+        if len(chat_history) > 50:
+            chat_history = chat_history[-50:]
+        
+        return jsonify({
+            'message': assistant_message,
+            'chat_history': chat_history[-10:]  # Return last 10 messages
+        })
         
     except Exception as e:
-        logger.error(f"Research error: {e}")
+        logger.error(f"Chat error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/chat-history')
+def get_chat_history():
+    """Get chat history."""
+    try:
+        return jsonify({
+            'chat_history': chat_history[-20:]  # Return last 20 messages
+        })
+    except Exception as e:
+        logger.error(f"Chat history error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/clear-chat', methods=['POST'])
+def clear_chat():
+    """Clear chat history."""
+    global chat_history
+    try:
+        chat_history = []
+        return jsonify({'message': 'Chat history cleared'})
+    except Exception as e:
+        logger.error(f"Clear chat error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/generate-report', methods=['POST'])
@@ -124,16 +295,6 @@ def generate_report():
         
         # Generate report
         report = agent.generate_report(result)
-        
-        # Save to temporary file
-        temp_file = tempfile.NamedTemporaryFile(
-            mode='w', 
-            suffix='.md', 
-            delete=False,
-            encoding='utf-8'
-        )
-        temp_file.write(report)
-        temp_file.close()
         
         return jsonify({
             'report_content': report,
@@ -177,350 +338,6 @@ def download_report(research_id):
         logger.error(f"Download error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/status')
-def status():
-    """Get system status."""
-    try:
-        doc_count = 0
-        agent_status = False
-        
-        if agent:
-            agent_status = True
-            try:
-                vector_info = agent.vector_store.get_collection_info()
-                doc_count = vector_info.get('count', 0)
-            except:
-                doc_count = 0
-        
-        return jsonify({
-            'agent_initialized': agent_status,
-            'documents_count': doc_count,
-            'model': 'Groq Llama-3-70B',
-            'vector_store': 'ChromaDB',
-            'status': 'online' if agent_status else 'offline'
-        })
-        
-    except Exception as e:
-        logger.error(f"Status error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-# Template for the HTML interface
-HTML_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔍 Multi-Document Research Agent</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 25%, #16213e 50%, #0f3460 100%);
-            min-height: 100vh;
-            color: #ffffff;
-            padding: 2rem;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 3rem;
-        }
-
-        .header h1 {
-            font-size: 3rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #64ffda 0%, #bb86fc 50%, #03dac6 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0.5rem;
-        }
-
-        .glass-card {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(20px);
-            border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 2rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-
-        .input-group {
-            margin-bottom: 2rem;
-        }
-
-        .input-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-            color: rgba(255, 255, 255, 0.9);
-        }
-
-        .question-input {
-            width: 100%;
-            min-height: 120px;
-            padding: 1rem;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 12px;
-            color: #ffffff;
-            font-size: 1rem;
-            resize: vertical;
-            font-family: inherit;
-        }
-
-        .question-input:focus {
-            outline: none;
-            border-color: #64ffda;
-            box-shadow: 0 0 0 2px rgba(100, 255, 218, 0.2);
-        }
-
-        .btn {
-            padding: 0.8rem 2rem;
-            border: none;
-            border-radius: 12px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-right: 1rem;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #64ffda 0%, #03dac6 100%);
-            color: #0f0f1a;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(100, 255, 218, 0.3);
-        }
-
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.1);
-            color: #ffffff;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 2rem;
-        }
-
-        .loading.visible {
-            display: block;
-        }
-
-        .loading-spinner {
-            width: 50px;
-            height: 50px;
-            border: 3px solid rgba(100, 255, 218, 0.1);
-            border-top: 3px solid #64ffda;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1rem;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .results {
-            display: none;
-        }
-
-        .results.visible {
-            display: block;
-        }
-
-        .status-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: rgba(255, 255, 255, 0.03);
-            padding: 1rem;
-            border-radius: 12px;
-            margin-bottom: 2rem;
-        }
-
-        .status-indicator {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #4caf50;
-            box-shadow: 0 0 10px #4caf50;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🔍 Multi-Document Research Agent</h1>
-            <p>Powered by Groq • LangChain • RAG</p>
-        </div>
-
-        <div class="status-bar">
-            <div class="status-indicator">
-                <div class="status-dot"></div>
-                <span>{{ 'Online' if agent_status else 'Offline' }}</span>
-            </div>
-            <div>
-                <span>Documents: {{ doc_count }}</span>
-            </div>
-        </div>
-
-        <div class="glass-card">
-            <div class="input-group">
-                <label for="question">🎯 Ask Your Research Question:</label>
-                <textarea id="question" class="question-input" placeholder="e.g., Explain how quantum computing affects cybersecurity and propose mitigation strategies"></textarea>
-            </div>
-            
-            <button class="btn btn-primary" onclick="startResearch()">🔍 Start Research</button>
-            <button class="btn btn-secondary" onclick="clearAll()">🗑️ Clear</button>
-        </div>
-
-        <div class="glass-card loading" id="loading">
-            <div class="loading-spinner"></div>
-            <h3>🔍 Researching...</h3>
-            <p>Analyzing documents and web resources</p>
-        </div>
-
-        <div class="glass-card results" id="results">
-            <h2>📋 Research Results</h2>
-            <div id="answer"></div>
-            <div id="details"></div>
-        </div>
-    </div>
-
-    <script>
-        async function startResearch() {
-            const question = document.getElementById('question').value.trim();
-            if (!question) {
-                alert('Please enter a research question!');
-                return;
-            }
-
-            document.getElementById('loading').classList.add('visible');
-            document.getElementById('results').classList.remove('visible');
-
-            try {
-                const response = await fetch('/api/research', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ question: question })
-                });
-
-                const data = await response.json();
-                
-                if (response.ok) {
-                    showResults(data);
-                } else {
-                    throw new Error(data.error || 'Research failed');
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            } finally {
-                document.getElementById('loading').classList.remove('visible');
-            }
-        }
-
-        function showResults(data) {
-            const resultsDiv = document.getElementById('results');
-            const answerDiv = document.getElementById('answer');
-            const detailsDiv = document.getElementById('details');
-
-            answerDiv.innerHTML = `<div style="line-height: 1.8; margin-bottom: 2rem;">${data.answer.replace(/\\n/g, '<br>')}</div>`;
-            
-            detailsDiv.innerHTML = `
-                <h3>📊 Research Details</h3>
-                <p><strong>Confidence:</strong> ${data.confidence_level}</p>
-                <p><strong>Sources Used:</strong> ${data.sources_count}</p>
-                <p><strong>Research Steps:</strong> ${data.steps_count}</p>
-                
-                <h3>🔗 Sources</h3>
-                <ul>${data.sources_used.map(source => `<li>${source}</li>`).join('')}</ul>
-                
-                <h3>🔧 Research Process</h3>
-                ${data.intermediate_steps.map(step => `
-                    <div style="margin-bottom: 1rem; padding: 1rem; background: rgba(255,255,255,0.03); border-radius: 8px;">
-                        <strong>Step ${step.step}: ${step.tool}</strong><br>
-                        <span style="color: rgba(255,255,255,0.7);">Query: ${step.input}</span><br>
-                        <span style="color: rgba(255,255,255,0.7);">Result: ${step.output}</span>
-                    </div>
-                `).join('')}
-                
-                <button class="btn btn-primary" onclick="generateReport('${data.research_id}')">📄 Generate Report</button>
-            `;
-
-            resultsDiv.classList.add('visible');
-        }
-
-        async function generateReport(researchId) {
-            try {
-                const response = await fetch('/api/generate-report', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ research_id: researchId })
-                });
-
-                const data = await response.json();
-                
-                if (response.ok) {
-                    // Open download link
-                    window.open(`/api/download-report/${researchId}`, '_blank');
-                } else {
-                    throw new Error(data.error || 'Report generation failed');
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            }
-        }
-
-        function clearAll() {
-            document.getElementById('question').value = '';
-            document.getElementById('results').classList.remove('visible');
-            document.getElementById('loading').classList.remove('visible');
-        }
-    </script>
-</body>
-</html>
-'''
-
-# Create templates directory and save template
-def create_template():
-    """Create the HTML template."""
-    os.makedirs('templates', exist_ok=True)
-    with open('templates/index.html', 'w', encoding='utf-8') as f:
-        f.write(HTML_TEMPLATE)
-
-# Create template before server starts
-create_template()
-
-
 if __name__ == '__main__':
     # Initialize agent
     if not initialize_agent():
@@ -528,7 +345,8 @@ if __name__ == '__main__':
         exit(1)
     
     print("🚀 Starting Flask server...")
-    print("🔍 Multi-Document Research Agent")
-    print("📱 Open http://localhost:5001 in your browser")
+    print("🔍 Multi-Document Research Agent API")
+    print("📱 Backend running on http://localhost:5001")
+    print("🎨 Frontend should run on http://localhost:3000")
     
     app.run(debug=True, host='0.0.0.0', port=5001)
