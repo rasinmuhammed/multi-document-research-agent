@@ -1,0 +1,34 @@
+# Flask Web Interface Requirements
+flask
+
+# Core LangChain and Groq
+langchain
+langchain-groq
+langchain-community
+langchain-huggingface
+
+# Agent Framework
+langgraph
+langsmith
+
+# Vector Database and Embeddings
+chromadb
+sentence-transformers
+
+# Document Processing
+pypdf
+unstructured
+python-markdown
+
+# Web Search and Scraping
+duckduckgo-search
+beautifulsoup4
+requests
+
+# Utilities
+python-dotenv
+pandas
+
+# Optional: For better performance
+torch
+transformers
