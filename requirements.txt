@@ -1,34 +1,52 @@
-# Flask Web Interface Requirements
-flask
+# Core Framework
+flask==2.3.3
+flask-socketio==5.3.6
+python-socketio==5.9.0
+python-engineio==4.7.1
 
-# Core LangChain and Groq
-langchain
-langchain-groq
-langchain-community
-langchain-huggingface
-
-# Agent Framework
-langgraph
-langsmith
-
-# Vector Database and Embeddings
-chromadb
-sentence-transformers
+# AI & LangChain
+langchain==0.1.0
+langchain-community==0.0.13
+langchain-groq==0.0.3
+langchain-huggingface==0.0.1
+langchain-chroma==0.1.0
+groq==0.4.1
 
 # Document Processing
-pypdf
-unstructured
-python-markdown
+pypdf==3.17.4
+unstructured==0.11.8
+unstructured[md]==0.11.8
+python-docx==1.1.0
+python-pptx==0.6.23
 
-# Web Search and Scraping
-duckduckgo-search
-beautifulsoup4
-requests
+# Vector Store & Embeddings
+chromadb==0.4.22
+sentence-transformers==2.2.2
+huggingface-hub==0.19.4
+
+# Web Search & Scraping
+duckduckgo-search==4.1.1
+beautifulsoup4==4.12.2
+requests==2.31.0
+selenium==4.16.0
+
+# Data Processing
+pandas==2.1.4
+numpy==1.24.4
+python-dotenv==1.0.0
 
 # Utilities
-python-dotenv
-pandas
+pydantic==2.5.2
+python-dateutil==2.8.2
+markdownify==0.11.6
+html2text==2020.1.16
 
-# Optional: For better performance
-torch
-transformers
+# Development & Monitoring
+logging==0.4.9.6
+colorlog==6.8.0
+tqdm==4.66.1
+
+# Optional: Advanced NLP (uncomment if needed)
+# spacy==3.7.2
+# nltk==3.8.1
+# transformers==4.36.2

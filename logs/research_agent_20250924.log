@@ -1,0 +1,78 @@
+2025-09-24 12:06:33,385 - __main__ - INFO - 🔍 Running startup checks...
+2025-09-24 12:06:33,386 - __main__ - INFO - 📚 Found 3 documents in ./documents/
+2025-09-24 12:06:33,386 - __main__ - INFO - ✅ Environment check passed
+2025-09-24 12:06:34,029 - __main__ - ERROR - ❌ Missing required packages: flask_socketio, langchain_groq, sentence_transformers, beautifulsoup4, python_dotenv
+2025-09-24 12:06:34,029 - __main__ - INFO - Install missing packages with:
+2025-09-24 12:06:34,029 - __main__ - INFO -   pip install flask_socketio langchain_groq sentence_transformers beautifulsoup4 python_dotenv
+2025-09-24 12:07:20,087 - __main__ - INFO - 🔍 Running startup checks...
+2025-09-24 12:07:20,088 - __main__ - INFO - 📚 Found 3 documents in ./documents/
+2025-09-24 12:07:20,088 - __main__ - INFO - ✅ Environment check passed
+2025-09-24 12:07:20,715 - __main__ - ERROR - ❌ Missing required packages: flask_socketio, langchain_groq, sentence_transformers, beautifulsoup4, python_dotenv
+2025-09-24 12:07:20,715 - __main__ - INFO - Install missing packages with:
+2025-09-24 12:07:20,715 - __main__ - INFO -   pip install flask_socketio langchain_groq sentence_transformers beautifulsoup4 python_dotenv
+2025-09-24 12:07:37,696 - __main__ - INFO - 🔍 Running startup checks...
+2025-09-24 12:07:37,697 - __main__ - INFO - 📚 Found 3 documents in ./documents/
+2025-09-24 12:07:37,697 - __main__ - INFO - ✅ Environment check passed
+2025-09-24 12:07:38,281 - __main__ - ERROR - ❌ Missing required packages: flask_socketio, langchain_groq, sentence_transformers, beautifulsoup4, python_dotenv
+2025-09-24 12:07:38,281 - __main__ - INFO - Install missing packages with:
+2025-09-24 12:07:38,281 - __main__ - INFO -   pip install flask_socketio langchain_groq sentence_transformers beautifulsoup4 python_dotenv
+2025-09-24 12:13:15,680 - __main__ - INFO - 🔍 Running startup checks...
+2025-09-24 12:13:15,681 - __main__ - INFO - 📚 Found 3 documents in ./documents/
+2025-09-24 12:13:15,681 - __main__ - INFO - ✅ Environment check passed
+2025-09-24 12:13:16,370 - __main__ - ERROR - ❌ Missing required packages: flask_socketio, langchain_groq, sentence_transformers, beautifulsoup4, python_dotenv
+2025-09-24 12:13:16,370 - __main__ - INFO - Install missing packages with:
+2025-09-24 12:13:16,370 - __main__ - INFO -   pip install flask_socketio langchain_groq sentence_transformers beautifulsoup4 python_dotenv
+2025-09-24 12:13:55,862 - __main__ - INFO - 🔍 Running startup checks...
+2025-09-24 12:13:55,863 - __main__ - INFO - 📚 Found 3 documents in ./documents/
+2025-09-24 12:13:55,863 - __main__ - INFO - ✅ Environment check passed
+2025-09-24 12:13:58,948 - httpx - INFO - HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+2025-09-24 12:13:58,955 - __main__ - INFO - ✅ Groq API connection successful
+2025-09-24 12:14:01,288 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
+2025-09-24 12:14:07,007 - agent.vector_store - INFO - Vector store initialized successfully
+2025-09-24 12:14:07,007 - __main__ - INFO - ✅ Vector store initialization successful
+2025-09-24 12:14:07,114 - __main__ - INFO - ✅ Web searcher initialization successful
+2025-09-24 12:14:07,115 - __main__ - INFO - 🎯 All checks passed, starting Enhanced AI Research Agent...
+2025-09-24 12:14:07,471 - __main__ - INFO - 🔄 Initializing research agent...
+2025-09-24 12:14:07,472 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
+2025-09-24 12:14:13,319 - agent.vector_store - INFO - Vector store initialized successfully
+2025-09-24 12:14:13,683 - agent.document_processor - INFO - Loaded 4 chunks from Aurivault Brand Product Blueprint.pdf
+2025-09-24 12:14:13,918 - agent.document_processor - INFO - Loaded 6 chunks from AuriVault Cost Optimization & Technical Roadmap.pdf
+2025-09-24 12:14:13,940 - agent.document_processor - INFO - Loaded 5 chunks from Vault Saas Project Plan.pdf
+2025-09-24 12:14:13,940 - agent.document_processor - INFO - Total chunks created: 27
+2025-09-24 12:14:14,529 - agent.vector_store - ERROR - Error adding documents: Expected metadata value to be a str, int, float, bool, SparseVector, or None, got ['cybersecurity'] which is a list in upsert.
+
+Try filtering complex metadata from the document using langchain_community.vectorstores.utils.filter_complex_metadata.
+2025-09-24 12:14:14,529 - agent.research_agent - INFO - Indexed 27 enhanced document chunks
+2025-09-24 12:14:14,535 - app - INFO - Research agent initialized successfully
+2025-09-24 12:14:14,535 - __main__ - INFO - ✅ Research agent initialized successfully
+2025-09-24 12:14:14,535 - __main__ - INFO - 🚀 Starting server on 0.0.0.0:5001
+2025-09-24 12:14:14,535 - __main__ - INFO - 💬 Chat interface: http://localhost:5001
+2025-09-24 12:14:14,535 - __main__ - INFO - 🔧 Debug mode: OFF
+2025-09-24 12:14:14,548 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://172.20.10.2:5001
+2025-09-24 12:14:14,548 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-09-24 12:14:20,249 - werkzeug - INFO - 172.20.10.2 - - [24/Sep/2025 12:14:20] "GET / HTTP/1.1" 200 -
+2025-09-24 12:14:20,685 - werkzeug - INFO - 172.20.10.2 - - [24/Sep/2025 12:14:20] "GET /socket.io/?EIO=4&transport=polling&t=PbwTqH9 HTTP/1.1" 200 -
+2025-09-24 12:14:20,933 - app - INFO - Client connected: YxEmrsqeCKYgQ5vZAAAB
+2025-09-24 12:14:20,933 - werkzeug - INFO - 172.20.10.2 - - [24/Sep/2025 12:14:20] "GET /socket.io/?EIO=4&transport=polling&t=PbwTqL2&sid=lvBuNCHaLwDZJ7jdAAAA HTTP/1.1" 200 -
+2025-09-24 12:14:20,934 - werkzeug - INFO - 172.20.10.2 - - [24/Sep/2025 12:14:20] "POST /socket.io/?EIO=4&transport=polling&t=PbwTqL1&sid=lvBuNCHaLwDZJ7jdAAAA HTTP/1.1" 200 -
+2025-09-24 12:14:20,934 - werkzeug - INFO - 172.20.10.2 - - [24/Sep/2025 12:14:20] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-09-24 12:14:20,947 - werkzeug - INFO - 172.20.10.2 - - [24/Sep/2025 12:14:20] "GET /socket.io/?EIO=4&transport=polling&t=PbwTqLG&sid=lvBuNCHaLwDZJ7jdAAAA HTTP/1.1" 200 -
+2025-09-24 12:14:20,975 - werkzeug - INFO - 172.20.10.2 - - [24/Sep/2025 12:14:20] "GET /socket.io/?EIO=4&transport=polling&t=PbwTqLe&sid=lvBuNCHaLwDZJ7jdAAAA HTTP/1.1" 200 -
+2025-09-24 12:14:21,806 - werkzeug - INFO - 127.0.0.1 - - [24/Sep/2025 12:14:21] "GET /socket.io/?EIO=4&transport=polling&t=PbwTqYg HTTP/1.1" 200 -
+2025-09-24 12:14:21,815 - app - INFO - Client connected: DNLVtpYVWRxrgjxGAAAD
+2025-09-24 12:14:21,816 - werkzeug - INFO - 127.0.0.1 - - [24/Sep/2025 12:14:21] "POST /socket.io/?EIO=4&transport=polling&t=PbwTqYm&sid=dlKnm95h9E3R42CcAAAC HTTP/1.1" 200 -
+2025-09-24 12:14:21,817 - werkzeug - INFO - 127.0.0.1 - - [24/Sep/2025 12:14:21] "GET /socket.io/?EIO=4&transport=polling&t=PbwTqYp&sid=dlKnm95h9E3R42CcAAAC HTTP/1.1" 200 -
+2025-09-24 12:14:21,819 - werkzeug - INFO - 127.0.0.1 - - [24/Sep/2025 12:14:21] "GET /socket.io/?EIO=4&transport=polling&t=PbwTqYw&sid=dlKnm95h9E3R42CcAAAC HTTP/1.1" 200 -
+2025-09-24 12:14:42,571 - app - ERROR - Research error: Working outside of request context.
+
+This typically means that you attempted to use functionality that needed
+an active HTTP request. Consult the documentation on testing for
+information about how to avoid this problem.
+2025-09-24 12:15:10,707 - app - INFO - Client disconnected: DNLVtpYVWRxrgjxGAAAD
+2025-09-24 12:15:10,710 - werkzeug - INFO - 127.0.0.1 - - [24/Sep/2025 12:15:10] "GET /socket.io/?EIO=4&transport=websocket&sid=dlKnm95h9E3R42CcAAAC HTTP/1.1" 200 -
+2025-09-24 12:16:00,723 - __main__ - INFO - 🛑 Received signal 2, shutting down gracefully...
+2025-09-24 12:16:00,726 - app - INFO - Client disconnected: YxEmrsqeCKYgQ5vZAAAB
+2025-09-24 12:16:00,730 - werkzeug - INFO - 172.20.10.2 - - [24/Sep/2025 12:16:00] "GET /socket.io/?EIO=4&transport=websocket&sid=lvBuNCHaLwDZJ7jdAAAA HTTP/1.1" 200 -
