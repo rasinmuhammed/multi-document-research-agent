@@ -16,17 +16,6 @@ from .web_searcher import WebSearcher
 
 logger = logging.getLogger(__name__)
 
-# -----------------------------
-ic Schem/*************  ✨ Windsurf Command ⭐  *************/
-        """
-        Initialize the ResearchAgent.
-
-        Args:
-            groq_api_key (str): The API key for the Groq LLM.
-            documents_dir (str, optional): The directory containing the initial documents to load. Defaults to "./documents".
-        """
-/*******  443af45d-9c6d-4c1c-a5b2-4eb74d2e6e84  *******/as for Tools
-# -----------------------------
 class LocalDocInput(BaseModel):
     query: str = Field(description="The search query for local documents.")
 
