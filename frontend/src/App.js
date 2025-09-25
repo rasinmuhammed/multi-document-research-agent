@@ -4,9 +4,11 @@ import { Search, FileText, Trash2, Upload, Send, BookOpen, Zap, Download, Eye, E
 const API_BASE = 'http://localhost:5001';
 
 // Modern Message Component
-const Message = ({ message, isUser }) => {
+const Message = ({ message }) => {
   const [showSteps, setShowSteps] = useState(false);
   const [showSources, setShowSources] = useState(false);
+
+  const isUser = message.type === 'user';
 
   if (isUser) {
     return (
@@ -42,11 +44,11 @@ const Message = ({ message, isUser }) => {
               ))}
             </div>
           </div>
-          
+
           {/* Sources Section */}
           {message.sources && message.sources.length > 0 && (
             <div className="mt-4">
-              <button 
+              <button
                 className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
                 onClick={() => setShowSources(!showSources)}
               >
@@ -67,9 +69,9 @@ const Message = ({ message, isUser }) => {
                           <div className="flex items-center gap-2 mb-1">
                             <File size={14} className="text-gray-400" />
                             {source.url ? (
-                              <a 
-                                href={source.url} 
-                                target="_blank" 
+                              <a
+                                href={source.url}
+                                target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center gap-1 transition-colors"
                               >
@@ -95,7 +97,7 @@ const Message = ({ message, isUser }) => {
           {/* Research Steps Section */}
           {message.research_steps && message.research_steps.length > 0 && (
             <div className="mt-4">
-              <button 
+              <button
                 className="flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-800 font-medium transition-colors"
                 onClick={() => setShowSteps(!showSteps)}
               >
@@ -145,8 +147,8 @@ const Message = ({ message, isUser }) => {
             <div className="flex items-center gap-3">
               {message.confidence && (
                 <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                  message.confidence === 'high' 
-                    ? 'bg-green-100 text-green-700' 
+                  message.confidence === 'high'
+                    ? 'bg-green-100 text-green-700'
                     : message.confidence === 'medium'
                     ? 'bg-yellow-100 text-yellow-700'
                     : 'bg-red-100 text-red-700'
