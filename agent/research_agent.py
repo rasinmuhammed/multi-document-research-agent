@@ -16,11 +16,11 @@ from .web_searcher import WebSearcher
 
 logger = logging.getLogger(__name__)
 
-class LocalDocInput(BaseModel):
-    query: str = Field(description="The search query for local documents.")
-
-class WebSearchInput(BaseModel):
-    query: str = Field(description="The search query for web resources.")
+# Pydantic models are good for documentation but we will let Langchain infer the schema
+# class LocalDocInput(BaseModel):
+#     query: str = Field(description="The search query for local documents.")
+# class WebSearchInput(BaseModel):
+#     query: str = Field(description="The search query for web resources.")
 
 
 class ResearchAgent:
@@ -36,9 +36,9 @@ class ResearchAgent:
         # Initialize LLM
         self.llm = ChatGroq(
             groq_api_key=groq_api_key,
-            model_name="llama-3.1-8b-instant",
-            temperature=0.1,
-            max_tokens=4000
+            model_name="llama-3.3-70b-versatile",
+            temperature=0.2,
+            max_tokens=8000
         )
         
         # Load documents
@@ -49,10 +49,10 @@ class ResearchAgent:
     
     def _load_initial_documents(self):
         """Load and index initial documents."""
-        if os.path.exists(self.documents_dir):
+        if os.path.exists(self.documents_dir) and os.listdir(self.documents_dir):
             documents = self.doc_processor.load_documents(self.documents_dir)
             if documents:
-                self.vector_store.add_documents(documents)
+                self.vector_store.rebuild_from_documents(documents)
                 logger.info(f"Indexed {len(documents)} document chunks")
     
     # -----------------------------
@@ -86,9 +86,6 @@ class ResearchAgent:
             if not web_docs:
                 return "No relevant web resources found."
             
-            # **FIX:** Do not add temporary web search results to the persistent vector store.
-            # self.vector_store.add_documents(web_docs)
-            
             formatted_results = []
             for doc in web_docs:
                 chunk_id = doc.metadata.get('chunk_id', 'web_unknown')
@@ -113,13 +110,11 @@ class ResearchAgent:
                 func=self._search_local_documents,
                 name="search_local_documents",
                 description="Search through local PDF and Markdown documents for relevant information. Use this for domain-specific knowledge, research papers, or internal documentation.",
-                args_schema=LocalDocInput
             ),
             StructuredTool.from_function(
                 func=self._search_web_resources,
                 name="search_web_resources", 
                 description="Search web resources including Wikipedia, arXiv, and other reliable sources. Use this for current information, general knowledge, or when local documents don't have sufficient information.",
-                args_schema=WebSearchInput
             )
         ]
         
@@ -127,19 +122,18 @@ class ResearchAgent:
             ("system", """You are an expert research assistant that helps users answer complex questions by searching through both local documents and web resources.
 
 Your approach should be:
-1. **Plan**: Break down the user's question into specific search queries
-2. **Search**: Use both local documents and web resources strategically
-3. **Synthesize**: Combine information from multiple sources
-4. **Cite**: Always provide clear citations and traceability
+1. **Plan**: Break down the user's question into specific search queries.
+2. **Search**: Use both local documents and web resources strategically. For complex queries, use multiple search queries to gather comprehensive information.
+3. **Synthesize**: Combine information from multiple sources to create a detailed and well-structured response.
+4. **Cite**: Always provide clear citations and traceability for every piece of information.
 
 When generating responses:
-- Always cite sources using format [SOURCE-ID] 
-- Provide bullet points for key findings
-- Include a summary with actionable insights
-- Maintain objectivity and acknowledge limitations
-- If information conflicts between sources, note the discrepancy
-
-For complex questions, search multiple times with different query formulations to ensure comprehensive coverage."""),
+- Provide a comprehensive answer that is at least three paragraphs long.
+- Always cite sources using the format [LOCAL-ID] or [WEB-ID].
+- Use bullet points for key findings, with each point individually cited.
+- Include a summary with actionable insights.
+- Maintain objectivity and acknowledge limitations or conflicting information.
+"""),
             ("human", "{input}"),
             ("placeholder", "{agent_scratchpad}")
         ])
@@ -201,7 +195,6 @@ For complex questions, search multiple times with different query formulations t
                 continue
             
             observation = str(step[1])
-            # Regex to find sources like [WEB-chunk_id] Source: http://...
             matches = re.findall(r"\[(WEB|LOCAL)-([^\]]+)\]\s+Source:\s+([^\s\n]+)", observation)
             
             for match in matches:
