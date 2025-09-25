@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, FileText, Trash2, Upload, Send, BookOpen, Zap, Download, Eye, EyeOff, Loader, ChevronDown, ChevronRight, ExternalLink, File, User, Bot } from 'lucide-react';
-import "./App.css";
 
 const API_BASE = 'http://localhost:5001';
 
@@ -692,8 +691,7 @@ const App = () => {
         </div>
       </div>
     </div>
-    )
-  }
-  
+  );
+};
 
 export default App;
