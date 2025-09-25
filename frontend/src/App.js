@@ -49,7 +49,15 @@ const Message = ({ message, isUser }) => {
                 {message.sources.map((source, i) => (
                   <div key={i} className="source-item">
                     <span className="source-badge">{i + 1}</span>
-                    <span className="source-text">{source}</span>
+                    <span className="source-text">
+                      {source.url ? (
+                        <a href={source.url} target="_blank" rel="noopener noreferrer">
+                          {source.name}
+                        </a>
+                      ) : (
+                        source.name
+                      )}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -73,7 +81,9 @@ const Message = ({ message, isUser }) => {
                       <span className="step-number">{step.step}</span>
                       <span className="step-tool">{step.tool}</span>
                     </div>
-                    <div className="step-query">Query: {step.input}</div>
+                    <div className="step-query">
+                      Query: {typeof step.input === 'object' ? step.input.query : step.input}
+                    </div>
                     <div className="step-result">{step.output}</div>
                   </div>
                 ))}

@@ -61,17 +61,18 @@ class ResearchAgent:
     def _search_local_documents(self, query: str) -> str:
         """Search through local documents for relevant information."""
         try:
-            results = self.vector_store.similarity_search_with_score(query, k=5)
+            results = self.vector_store.similarity_search(query, k=5)
             if not results:
                 return "No relevant local documents found."
             
             formatted_results = []
-            for i, (doc, score) in enumerate(results):
-                source = doc.metadata.get('source_file', 'unknown')
-                chunk_id = doc.metadata.get('chunk_id', f'chunk_{i}')
+            for i, doc in enumerate(results):
+                source = doc['metadata'].get('source_file', 'unknown')
+                chunk_id = doc['metadata'].get('chunk_id', f'chunk_{i}')
+                score = doc.get('score', 0.0)
                 formatted_results.append(
                     f"[LOCAL-{chunk_id}] Source: {source} (Relevance: {1-score:.3f})\n"
-                    f"Content: {doc.page_content[:500]}...\n"
+                    f"Content: {doc['page_content'][:500]}...\n"
                 )
             return "\n".join(formatted_results)
         except Exception as e:
@@ -85,13 +86,15 @@ class ResearchAgent:
             if not web_docs:
                 return "No relevant web resources found."
             
-            self.vector_store.add_documents(web_docs)
+            # **FIX:** Do not add temporary web search results to the persistent vector store.
+            # self.vector_store.add_documents(web_docs)
             
             formatted_results = []
             for doc in web_docs:
                 chunk_id = doc.metadata.get('chunk_id', 'web_unknown')
+                source_url = doc.metadata.get('source', 'unknown url')
                 formatted_results.append(
-                    f"[WEB-{chunk_id}] Source: Web Search\n"
+                    f"[WEB-{chunk_id}] Source: {source_url}\n"
                     f"Content: {doc.page_content[:500]}...\n"
                 )
             return "\n".join(formatted_results)
@@ -165,16 +168,16 @@ For complex questions, search multiple times with different query formulations t
             
             result = self.agent_executor.invoke({"input": question})
             
-            # Handle both possible keys
             answer = result.get("output") or result.get("output_text", "")
+            intermediate_steps = result.get("intermediate_steps", [])
             
             structured_response = {
                 "question": question,
                 "timestamp": datetime.now().isoformat(),
                 "answer": answer,
-                "intermediate_steps": result.get("intermediate_steps", []),
-                "sources_used": self._extract_sources_from_steps(result.get("intermediate_steps", [])),
-                "confidence_level": "high" if len(result.get("intermediate_steps", [])) >= 2 else "medium"
+                "intermediate_steps": intermediate_steps,
+                "sources_used": self._extract_sources_from_steps(intermediate_steps),
+                "confidence_level": "high" if len(intermediate_steps) >= 2 else "medium"
             }
             
             return structured_response
@@ -190,15 +193,27 @@ For complex questions, search multiple times with different query formulations t
                 "confidence_level": "low"
             }
     
-    def _extract_sources_from_steps(self, steps: List[tuple]) -> List[str]:
+    def _extract_sources_from_steps(self, steps: List[tuple]) -> List[Dict[str, str]]:
         """Extract unique sources from intermediate steps."""
-        sources = set()
+        sources = {}
         for step in steps:
-            if len(step) >= 2:
-                observation = str(step[1])
-                matches = re.findall(r'\[([^\]]+)\]', observation)
-                sources.update(matches)
-        return list(sources)
+            if len(step) < 2:
+                continue
+            
+            observation = str(step[1])
+            # Regex to find sources like [WEB-chunk_id] Source: http://...
+            matches = re.findall(r"\[(WEB|LOCAL)-([^\]]+)\]\s+Source:\s+([^\s\n]+)", observation)
+            
+            for match in matches:
+                source_type, chunk_id, source_url = match
+                key = (source_type, source_url)
+                if key not in sources:
+                    sources[key] = {
+                        "type": source_type.lower(),
+                        "name": os.path.basename(source_url) if source_type == 'LOCAL' else source_url,
+                        "url": source_url if source_type == 'WEB' else None
+                    }
+        return list(sources.values())
     
     # -----------------------------
     # Report Generation
@@ -222,7 +237,7 @@ For complex questions, search multiple times with different query formulations t
 ## Sources Used
 """
         for i, source in enumerate(research_result['sources_used'], 1):
-            report += f"{i}. {source}\n"
+            report += f"{i}. {source.get('name', 'Unknown')}\n"
         
         report += f"""
 ## Research Steps
@@ -233,8 +248,12 @@ Total research iterations: {len(research_result['intermediate_steps'])}
             if len(step) >= 2:
                 action = step[0]
                 observation = step[1]
+                tool_input = action.tool_input if hasattr(action, 'tool_input') else 'N/A'
+                if isinstance(tool_input, dict):
+                    tool_input = tool_input.get('query', str(tool_input))
+
                 report += f"### Step {i}: {action.tool if hasattr(action, 'tool') else 'Unknown'}\n"
-                report += f"**Query**: {action.tool_input if hasattr(action, 'tool_input') else 'N/A'}\n"
+                report += f"**Query**: {tool_input}\n"
                 report += f"**Result**: {str(observation)[:500]}...\n\n"
         
         report += """

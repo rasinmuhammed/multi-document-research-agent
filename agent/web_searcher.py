@@ -1,33 +1,38 @@
 from typing import List, Dict, Any
-from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_community.tools import DuckDuckGoSearchResults
 from langchain.schema import Document
 import requests
 from bs4 import BeautifulSoup
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
 class WebSearcher:
     def __init__(self):
-        self.search_tool = DuckDuckGoSearchRun()
+        self.search_tool = DuckDuckGoSearchResults()
     
     def search_web(self, query: str, num_results: int = 5) -> List[Dict[str, str]]:
         """Search the web and return structured results."""
         try:
-            # Get search results
-            results = self.search_tool.run(f"{query} site:wikipedia.org OR site:arxiv.org OR site:github.com")
+            # Get search results as a string of JSON-like data
+            results_str = self.search_tool.run(query)
             
-            # Parse and structure results
+            # Clean and parse the string into a list of dictionaries
+            try:
+                results = json.loads(results_str)
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse search results: {results_str}")
+                return []
+
             search_results = []
-            lines = results.split('\n')
-            
-            for line in lines[:num_results]:
-                if line.strip():
-                    search_results.append({
-                        'content': line.strip(),
-                        'source': 'web_search',
-                        'query': query
-                    })
+            for item in results[:num_results]:
+                search_results.append({
+                    'content': item.get('snippet', 'No snippet available.'),
+                    'source': item.get('link', 'No link available'),
+                    'title': item.get('title', 'No title'),
+                    'query': query
+                })
             
             logger.info(f"Found {len(search_results)} web search results")
             return search_results
@@ -72,8 +77,9 @@ class WebSearcher:
             doc = Document(
                 page_content=result['content'],
                 metadata={
-                    'source': f"web_search_{i}",
+                    'source': result['source'],
                     'source_type': 'web_search',
+                    'title': result['title'],
                     'query': query,
                     'chunk_id': f"web_{hash(query)}_{i}"
                 }

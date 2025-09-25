@@ -7,7 +7,7 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
-class ImprovedVectorStore:
+class VectorStoreManager:
     def __init__(self, persist_directory: str = "./chroma_db"):
         self.persist_directory = persist_directory
         self.collection_name = "documents"
@@ -18,21 +18,16 @@ class ImprovedVectorStore:
     def _initialize_client(self):
         """Initialize ChromaDB client with proper error handling."""
         try:
-            # Ensure directory exists
             os.makedirs(self.persist_directory, exist_ok=True)
-            
-            # Initialize ChromaDB client with new API
             self.client = chromadb.PersistentClient(path=self.persist_directory)
             
-            # Get or create collection
             try:
                 self.collection = self.client.get_collection(name=self.collection_name)
                 logger.info(f"Loaded existing collection '{self.collection_name}'")
             except Exception:
-                # Collection doesn't exist, create it
                 self.collection = self.client.create_collection(
                     name=self.collection_name,
-                    metadata={"hnsw:space": "cosine"}  # Use cosine similarity
+                    metadata={"hnsw:space": "cosine"}
                 )
                 logger.info(f"Created new collection '{self.collection_name}'")
             
@@ -43,57 +38,26 @@ class ImprovedVectorStore:
             raise
     
     def add_documents(self, documents: List[Any]) -> bool:
-        """Add documents to the vector store."""
+        """Add documents to the vector store without clearing existing ones."""
         try:
             if not documents:
                 logger.warning("No documents provided to add")
                 return True
             
-            # Clear existing documents first (for fresh indexing)
-            self._clear_collection()
-            
-            # Prepare data for ChromaDB
-            doc_texts = []
-            metadatas = []
-            ids = []
+            doc_texts, metadatas, ids = [], [], []
             
             for i, doc in enumerate(documents):
-                # Extract text content
-                if hasattr(doc, 'page_content'):
-                    text = doc.page_content
-                elif hasattr(doc, 'content'):
-                    text = doc.content
-                else:
-                    text = str(doc)
+                text = doc.page_content if hasattr(doc, 'page_content') else str(doc)
+                metadata = doc.metadata.copy() if hasattr(doc, 'metadata') and isinstance(doc.metadata, dict) else {}
                 
-                # Extract metadata
-                if hasattr(doc, 'metadata') and isinstance(doc.metadata, dict):
-                    metadata = doc.metadata.copy()
-                else:
-                    metadata = {}
-                
-                # Ensure metadata values are strings or numbers
-                cleaned_metadata = {}
-                for key, value in metadata.items():
-                    if isinstance(value, (str, int, float, bool)):
-                        cleaned_metadata[key] = str(value)
-                    elif isinstance(value, list):
-                        cleaned_metadata[key] = str(value)
-                    else:
-                        cleaned_metadata[key] = str(value)
+                cleaned_metadata = {key: str(value) for key, value in metadata.items()}
                 
                 doc_texts.append(text)
                 metadatas.append(cleaned_metadata)
-                ids.append(f"doc_{i}_{uuid.uuid4().hex[:8]}")
+                ids.append(f"doc_{cleaned_metadata.get('source_file', 'web')}_{i}_{uuid.uuid4().hex[:8]}")
             
-            # Add to collection
             if doc_texts:
-                self.collection.add(
-                    documents=doc_texts,
-                    metadatas=metadatas,
-                    ids=ids
-                )
-                
+                self.collection.add(documents=doc_texts, metadatas=metadatas, ids=ids)
                 logger.info(f"Successfully added {len(doc_texts)} documents to vector store")
                 return True
             
@@ -102,11 +66,15 @@ class ImprovedVectorStore:
         except Exception as e:
             logger.error(f"Error adding documents to vector store: {e}")
             return False
+            
+    def rebuild_from_documents(self, documents: List[Any]):
+        """Clear the collection and rebuild it from a list of documents."""
+        self.reset_collection()
+        self.add_documents(documents)
     
     def _clear_collection(self):
         """Clear all documents from the collection."""
         try:
-            # Get all IDs and delete them
             result = self.collection.get()
             if result['ids']:
                 self.collection.delete(ids=result['ids'])
@@ -121,13 +89,8 @@ class ImprovedVectorStore:
                 logger.error("Collection not initialized")
                 return []
             
-            # Query the collection
-            results = self.collection.query(
-                query_texts=[query],
-                n_results=min(k, 10)  # Limit results
-            )
+            results = self.collection.query(query_texts=[query], n_results=min(k, 10))
             
-            # Format results
             formatted_results = []
             if results['documents'] and results['documents'][0]:
                 for i, doc_text in enumerate(results['documents'][0]):
@@ -151,9 +114,7 @@ class ImprovedVectorStore:
             if not self.collection:
                 return {'count': 0, 'error': 'Collection not initialized'}
             
-            # Get collection count
-            result = self.collection.get()
-            count = len(result['ids']) if result['ids'] else 0
+            count = self.collection.count()
             
             return {
                 'count': count,
@@ -171,22 +132,8 @@ class ImprovedVectorStore:
             if not self.collection:
                 return False
             
-            # Get all documents
-            result = self.collection.get()
-            
-            if not result['ids']:
-                return True
-            
-            # Find IDs to delete based on source metadata
-            ids_to_delete = []
-            for i, metadata in enumerate(result['metadatas']):
-                if metadata and metadata.get('source', '').endswith(source_filename):
-                    ids_to_delete.append(result['ids'][i])
-            
-            # Delete matching documents
-            if ids_to_delete:
-                self.collection.delete(ids=ids_to_delete)
-                logger.info(f"Deleted {len(ids_to_delete)} documents with source: {source_filename}")
+            self.collection.delete(where={"source_file": source_filename})
+            logger.info(f"Deleted documents with source: {source_filename}")
             
             return True
             
@@ -197,18 +144,13 @@ class ImprovedVectorStore:
     def reset_collection(self):
         """Reset the entire collection."""
         try:
-            # Delete the collection
             self.client.delete_collection(name=self.collection_name)
-            
-            # Recreate it
             self.collection = self.client.create_collection(
                 name=self.collection_name,
                 metadata={"hnsw:space": "cosine"}
             )
-            
             logger.info("Collection reset successfully")
             return True
-            
         except Exception as e:
             logger.error(f"Error resetting collection: {e}")
             return False
